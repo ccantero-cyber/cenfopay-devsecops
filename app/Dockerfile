@@ -12,7 +12,11 @@ WORKDIR /build
 COPY requirements.txt .
 RUN python -m venv /opt/venv \
  && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
- && /opt/venv/bin/pip install --no-cache-dir --require-virtualenv -r requirements.txt
+ && /opt/venv/bin/pip install --no-cache-dir --require-virtualenv -r requirements.txt \
+ && /opt/venv/bin/python -m pip uninstall -y pip
+# ↑ pip ya hizo su trabajo: se quita del entorno para que no viaje a la imagen final.
+#   pip trae dentro sus propias copias de librerías (urllib3, msgpack, setuptools…) y
+#   Trivy las reporta como vulnerables aunque CenfoPay nunca las use.
 
 # ---------------------------------------------------------------- 2. ejecución
 FROM ${PYTHON_IMAGE}
@@ -25,10 +29,13 @@ ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1
 
 # Parches de seguridad del sistema operativo disponibles al construir la imagen.
+# También se quita el pip que trae la imagen oficial de Python: la app no lo necesita
+# para funcionar y sus librerías internas son la causa de los hallazgos de Trivy.
 # hadolint ignore=DL3005
 RUN apt-get update \
  && apt-get upgrade -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/* \
+ && /usr/local/bin/python -m pip uninstall -y pip \
  && groupadd --system --gid 10001 cenfopay \
  && useradd --system --uid 10001 --gid cenfopay --no-create-home \
             --home-dir /nonexistent --shell /usr/sbin/nologin cenfopay
